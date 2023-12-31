@@ -12,7 +12,7 @@ data_df = pd.read_csv(data_path)
 data_df.set_index('Id', inplace=True)
 
 # read feature descriptions
-with open(curr_path / 'data' / 'feature_description.txt', 'r') as f:
+with open(curr_path / 'data' / 'feature_description.txt', 'r', encoding='utf-8') as f:
     feature_descriptions = json.loads(f.read())['features']
 
 # mapper from name to description
@@ -31,4 +31,4 @@ for name, dtype in data_df.dtypes.iteritems():
         stats['desc'] = description_mapper.get(name)
         stats.index = stats.index.str.replace(pat='%', repl='pct')
         mlflow.log_params(stats.to_dict())
-        
+
