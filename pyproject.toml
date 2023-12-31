@@ -1,0 +1,18 @@
+[project]
+name = "housing"
+version = "1.0"
+authors = [
+  { name="wiz", email="wilsonzhou92@gmail.com" },
+]
+description = "housing data science"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.poetry]
+packages = [
+    { include = 'src' },
+]
