@@ -23,56 +23,60 @@ from eval_regression import ModelReport, ModelReportBuilder
 ModelConstructor = Callable[[None], BaseEstimator]
 PreprocessorConstructor = Callable[[None], TransformerMixin]
 
+
 def create_preprocessor_oe() -> ColumnTransformer:
     num_cols = make_column_selector(dtype_include=np.number)
     cat_cols = make_column_selector(dtype_include=object)
     num_ppl = Pipeline(steps=[('imputer', (SimpleImputer(fill_value=-1)
-                                        .set_output(transform="pandas"))),
-                            ('scaler', (StandardScaler()
-                                        .set_output(transform="pandas"))),
-                            ])
-                            # TODO: Outlier detection
+                                           .set_output(transform="pandas"))),
+                              ('scaler', (StandardScaler()
+                                          .set_output(transform="pandas"))),
+                              ])
+    # TODO: Outlier detection
     cat_ppl = Pipeline(steps=[('oe', (OrdinalEncoder(handle_unknown='use_encoded_value',
                                                      unknown_value=-1,
                                                      encoded_missing_value=-1)
-                                    .set_output(transform='pandas'))),
-                            # ('scaler', (StandardScaler()
-                            #             .set_output(transform="pandas"))),
-                            ])
+                                      .set_output(transform='pandas'))),
+                              # ('scaler', (StandardScaler()
+                              #             .set_output(transform="pandas"))),
+                              ])
     return (ColumnTransformer(transformers=[('num', num_ppl, num_cols),
-                                                    ('cat', cat_ppl, cat_cols),],
-                                    verbose_feature_names_out=False)
-                    .set_output(transform='pandas'))
+                                            ('cat', cat_ppl, cat_cols),],
+                              verbose_feature_names_out=False)
+            .set_output(transform='pandas'))
+
 
 def create_preprocessor_ohe() -> ColumnTransformer:
     num_cols = make_column_selector(dtype_include=np.number)
     cat_cols = make_column_selector(dtype_include=object)
     num_ppl = Pipeline(steps=[('imputer', (SimpleImputer(fill_value=-1)
-                                        .set_output(transform="pandas"))),
-                            ('scaler', (StandardScaler()
-                                        .set_output(transform="pandas"))),
-                            ])
-                            # TODO: Outlier detection
+                                           .set_output(transform="pandas"))),
+                              ('scaler', (StandardScaler()
+                                          .set_output(transform="pandas"))),
+                              ])
+    # TODO: Outlier detection
     cat_ppl = Pipeline(steps=[('ohe', (OneHotEncoder(handle_unknown='infrequent_if_exist',
                                                      drop='first',
-                                                    sparse_output=False)
-                                    .set_output(transform='pandas'))),
-                            # ('scaler', (StandardScaler()
-                            #             .set_output(transform="pandas"))),
-                            ])
+                                                     sparse_output=False)
+                                       .set_output(transform='pandas'))),
+                              # ('scaler', (StandardScaler()
+                              #             .set_output(transform="pandas"))),
+                              ])
     return (ColumnTransformer(transformers=[('num', num_ppl, num_cols),
-                                                    ('cat', cat_ppl, cat_cols),],
-                                    verbose_feature_names_out=False)
-                    .set_output(transform='pandas'))
+                                            ('cat', cat_ppl, cat_cols),],
+                              verbose_feature_names_out=False)
+            .set_output(transform='pandas'))
 
-def create_xgboost(preprocessor: PreprocessorConstructor=None) -> Pipeline:
+
+def create_xgboost(preprocessor: PreprocessorConstructor = None) -> Pipeline:
     '''gets a new instance of a xgboost model'''
     if not preprocessor:
         preprocessor = create_preprocessor_ohe
     return Pipeline(steps=[('preprocessor', preprocessor()),
-                            ('model', xgboost.XGBRegressor())])
+                           ('model', xgboost.XGBRegressor())])
 
-def create_log_linear(preprocessor: PreprocessorConstructor=None) -> Pipeline:
+
+def create_log_linear(preprocessor: PreprocessorConstructor = None) -> Pipeline:
     @np.vectorize
     def truncated_exp(x: float) -> float:
         MIN_PRICE = 0
@@ -83,14 +87,15 @@ def create_log_linear(preprocessor: PreprocessorConstructor=None) -> Pipeline:
         preprocessor = create_preprocessor_ohe
 
     tt_linear = TransformedTargetRegressor(regressor=LinearRegression(n_jobs=-1),
-                                            func=np.log,
-                                            inverse_func=truncated_exp,
-                                            check_inverse=False)
+                                           func=np.log,
+                                           inverse_func=truncated_exp,
+                                           check_inverse=False)
 
     return Pipeline(steps=[('preprocessor', preprocessor()),
-                                ('model', tt_linear)])
+                           ('model', tt_linear)])
 
-def create_knn(preprocessor: PreprocessorConstructor=None, **kwargs) -> Pipeline:
+
+def create_knn(preprocessor: PreprocessorConstructor = None, **kwargs) -> Pipeline:
     if not preprocessor:
         preprocessor = create_preprocessor_ohe
 
@@ -98,7 +103,7 @@ def create_knn(preprocessor: PreprocessorConstructor=None, **kwargs) -> Pipeline
                            ('model', KNeighborsRegressor(**kwargs))])
 
 
-def create_lasso(preprocessor: PreprocessorConstructor=None) -> Pipeline:
+def create_lasso(preprocessor: PreprocessorConstructor = None) -> Pipeline:
     if not preprocessor:
         preprocessor = create_preprocessor_ohe
 
@@ -106,12 +111,11 @@ def create_lasso(preprocessor: PreprocessorConstructor=None) -> Pipeline:
                            ('model', Lasso(tol=1e-3))])
 
 
-
 def error_by_actual_price(X: pd.DataFrame,
                           y: pd.DataFrame,
                           model: BaseEstimator,
                           kfold: KFold,
-                          error_measure: Callable=None) -> pd.DataFrame:
+                          error_measure: Callable = None) -> pd.DataFrame:
     '''get table with prediction error by actual price'''
     def mean_absolute_error(y_test, y_pred):
         return np.abs(y_test - y_pred)
@@ -126,19 +130,20 @@ def error_by_actual_price(X: pd.DataFrame,
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
-    eval_df = pd.DataFrame({'price':y_test,
+    eval_df = pd.DataFrame({'price': y_test,
                             'pred_price': y_pred.round(),
                             'error_pred': error_measure(y_test, y_pred).round()})
 
     return (eval_df
-                .groupby(pd.cut(x=eval_df['price'] / 1_000,
-                                bins=range(0, 650, 20)))
-                .agg(error_pred=('error_pred', 'mean'),
-                    std_pred=('error_pred', 'std'),
-                    count=('error_pred', 'count'),)
-                .round(0)
-                .astype('Int64')
-                .loc[lambda x: x['count'] > 0])
+            .groupby(pd.cut(x=eval_df['price'] / 1_000,
+                            bins=range(0, 650, 20)))
+            .agg(error_pred=('error_pred', 'mean'),
+                 std_pred=('error_pred', 'std'),
+                 count=('error_pred', 'count'),)
+            .round(0)
+            .astype('Int64')
+            .loc[lambda x: x['count'] > 0])
+
 
 @dataclass
 class EvaluationSet:
@@ -146,14 +151,14 @@ class EvaluationSet:
     labels: pd.Series
     model_constructor: ModelConstructor
 
-def evaluate_multiple_models(k_fold: KFold, / , *args) -> Iterable[ModelReport]:
+
+def evaluate_multiple_models(k_fold: KFold, /, *args) -> Iterable[ModelReport]:
     for eval_set in args:
         report = ModelReportBuilder(eval_set.features,
                                     eval_set.labels,
                                     eval_set.model_constructor(),
                                     k_fold)
         yield report
-
 
 
 if __name__ == '__main__':
@@ -173,10 +178,11 @@ if __name__ == '__main__':
         feature_descriptions = json.loads(f.read())['features']
 
     # mapper from name to description
-    description_mapper = dict(pluck(['name','desc'], feature_descriptions))
+    description_mapper = dict(pluck(['name', 'desc'], feature_descriptions))
 
-    X,y = data_df.drop(columns='SalePrice'), data_df['SalePrice']
-    X = X.rename(columns=lambda s: s.lower().replace('.', '_').replace('(', '').replace(')', ''))
+    X, y = data_df.drop(columns='SalePrice'), data_df['SalePrice']
+    X = X.rename(columns=lambda s: s.lower().replace(
+        '.', '_').replace('(', '').replace(')', ''))
     for col in X[cat_cols].columns:
         X[col] = X[col].fillna('')
     # X[num_cols].pipe(num_ppl.fit_transform).describe().transpose().round(2)
@@ -232,7 +238,6 @@ if __name__ == '__main__':
         print('column counts: ',
               len(eval_set.features.columns.tolist()))
         print(json.dumps(r.summary.dict(), indent=4))
-
 
     # test data
     test_path = curr_path / 'data' / 'test.csv'
